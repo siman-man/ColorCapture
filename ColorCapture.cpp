@@ -130,7 +130,7 @@ class ColorCapture {
       updateControlField(HEIGHT, WIDTH, g_enemyColor, ENEMY);
     }
 
-    void updateControlField(int y, int x, int color, int id) {
+    void updateControlField(int y, int x, char color, int id) {
       g_control[y][x] = id;
       g_searchStamp[y][x] = g_stamp;
 
@@ -149,7 +149,8 @@ class ColorCapture {
     }
 
     int makeTurn(vector<string> board, int timeLeftMs) {
-      if (timeLeftMs < 1500) {
+      if (timeLeftMs < 1500 && !g_warning) {
+        fprintf(stderr,"turn %d: Warning\n", g_turn);
         g_warning = true;
       }
       g_turn++;
@@ -184,6 +185,9 @@ class ColorCapture {
       if (!g_warning && g_maxColor <= 4) {
         depthLimit = 2;
       }
+      if (HEIGHT >= 80) {
+        BEAM_WIDTH = 20;
+      }
 
       for (int depth = 0; depth < depthLimit; depth++) {
         priority_queue<Node, vector<Node>, greater<Node> > pque;
@@ -193,14 +197,14 @@ class ColorCapture {
 
           for (int c = 0; c <= g_maxColor; c++) {
             char color = int2color(c);
-            if (depth == 0 && !canChange(color)) continue;
+            if (depth == 0 && !canChangeColor(color)) continue;
             if (depth > 0 && node.colors[depth-1] == color) continue;
 
             memcpy(g_board, node.board, sizeof(node.board));
             memcpy(g_control, node.control, sizeof(node.control));
 
             g_stamp++;
-            double score = erosion(1, 1, color, MY);
+            double score = erosion(1, 1, color);
             Node cand;
             cand.score = node.score + score;
             cand.colors = node.colors;
@@ -231,7 +235,7 @@ class ColorCapture {
     int randomColor() {
       for (int i = 0; i <= g_maxColor; i++) {
         char color = int2color(i);
-        if (canChange(color)) return i;
+        if (canChangeColor(color)) return i;
       }
 
       return 0;
@@ -247,10 +251,10 @@ class ColorCapture {
       memcpy(g_control, g_tempControl, sizeof(g_tempControl));
     }
 
-    int erosion(int y, int x, char color, int id) {
+    int erosion(int y, int x, char color) {
       int cnt = 0;
 
-      if (g_board[y][x] == color) {
+      if (g_control[y][x] == NONE && g_board[y][x] == color) {
         if (g_turn < HEIGHT*1.15) {
           cnt = 100 * min(y,x);
         } else {
@@ -259,7 +263,7 @@ class ColorCapture {
       }
 
       g_searchStamp[y][x] = g_stamp;
-      g_control[y][x] = id;
+      g_control[y][x] = MY;
       g_board[y][x] = color;
 
       for (int i = 0; i < 4; i++) {
@@ -269,11 +273,11 @@ class ColorCapture {
         if (g_searchStamp[ny][nx] == g_stamp) continue;
         if (g_control[ny][nx] == ENEMY) continue;
 
-        if (g_control[ny][nx] == id || g_board[ny][nx] == color) {
+        if (g_control[ny][nx] == MY || g_board[ny][nx] == color) {
           if (g_maxColor <= 5) {
-            cnt += erosion(ny, nx, color, id);
+            cnt += erosion(ny, nx, color);
           } else {
-            cnt = max(cnt, erosion(ny, nx, color, id));
+            cnt = max(cnt, erosion(ny, nx, color));
           }
         }
       }
@@ -294,7 +298,7 @@ class ColorCapture {
       }
     }
 
-    inline bool canChange(char color) {
+    inline bool canChangeColor(char color) {
       return (color != g_myColor && color != g_enemyColor);
     }
 
