@@ -1,6 +1,7 @@
 *.swp
 *.txt
 ColorCapture
+.DS_Store
 *.png
 *.jar
 data/

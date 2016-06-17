@@ -2,7 +2,7 @@ require 'open3'
 
 PROBLEM_NAME = 'ColorCapture'
 ROUND_ID = 16703
-SEED = 1
+SEED = 5
 
 desc 'c++ file compile'
 task :default do
@@ -70,7 +70,7 @@ task :sample do
   end
 
   system("ruby scripts/analyze.rb 10")
-  system("ruby scripts/submit.rb #{ROUND_ID} example #{PROBLEM_NAME}.cpp")
+  #system("ruby scripts/submit.rb #{ROUND_ID} example #{PROBLEM_NAME}.cpp")
 end
 
 task :test do

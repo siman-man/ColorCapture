@@ -2,9 +2,11 @@
 #include <cstdlib>
 #include <iostream>
 #include <map>
+#include <queue>
 #include <string.h>
 #include <sstream>
 #include <vector>
+#include <cassert>
 #include <set>
 
 using namespace std;
@@ -21,8 +23,8 @@ const int NONE = -1;
 const int MY = 0;
 const int ENEMY = 1;
 
-bool g_canGetPixel[MAX_HEIGHT][MAX_WIDTH];
-int g_control[MAX_HEIGHT][MAX_WIDTH];
+int BEAM_WIDTH = 200;
+
 ll g_searchStamp[MAX_HEIGHT][MAX_WIDTH];
 
 int g_turn = 0;
@@ -31,8 +33,13 @@ int HEIGHT;
 int WIDTH;
 int g_stamp;
 int g_maxColor;
+int g_remainCount;
+bool g_warning;
+char g_enemyBestColor;
 vector< vector<char> > g_board;
-map<char, int> g_getCount;
+vector< vector<char> > g_tempBoard;
+vector< vector<int> > g_control;
+vector< vector<int> > g_tempControl;
 
 const char WALL = 'W';
 
@@ -44,6 +51,21 @@ struct Coord {
     this->y = y;
     this->x = x;
   }
+};
+
+struct Node {
+  vector<char> colors;
+  double score;
+  vector< vector<char> > board;
+  vector< vector<int> > control;
+
+  Node() {
+    this->score = 0.0;
+  }
+
+  bool operator >(const Node &e) const{
+    return score < e.score;
+  }    
 };
 
 char g_myColor;
@@ -69,10 +91,11 @@ class ColorCapture {
       HEIGHT = board.size();
       WIDTH = board[0].size();
       g_board = vector< vector<char> >(HEIGHT+2, vector<char>(WIDTH+2));
+      g_control = vector< vector<int> >(HEIGHT+2, vector<int>(WIDTH+2, NONE));
       g_stamp = 0;
       g_maxColor = 0;
+      g_warning = false;
 
-      memset(g_control, NONE, sizeof(g_control));
       memset(g_searchStamp, -1, sizeof(g_searchStamp));
 
       g_control[1][1] = MY;
@@ -95,38 +118,26 @@ class ColorCapture {
     }
 
     void update(vector<string> &board) {
-      memset(g_canGetPixel, false, sizeof(g_canGetPixel));
-
       for (int y = 1; y <= HEIGHT; y++) {
         for (int x = 1; x <= WIDTH; x++) {
           g_board[y][x] = board[y-1][x-1];
         }
       }
 
+      g_remainCount = HEIGHT * WIDTH;
+
       g_myColor = g_board[1][1];
       g_enemyColor = g_board[HEIGHT][WIDTH];
-
-      updateCanGetPixelField();
-      updateGetCountPixel();
 
       g_stamp++;
       updateControlField(1, 1, g_myColor, MY);
       g_stamp++;
       updateControlField(HEIGHT, WIDTH, g_enemyColor, ENEMY);
-    }
 
-    void updateCanGetPixelField() {
-      int mpsize = g_myPixelList.size();
-      for (int i = 0; i < mpsize; i++) {
-        Coord *coord = &g_myPixelList[i];
-
-        for (int j = 0; j < 4; j++) {
-          int ny = coord->y + DY[j];
-          int nx = coord->x + DX[j];
-
-          if (isWall(ny, nx)) continue;
-          if (g_control[ny][nx] == NONE) {
-            g_canGetPixel[ny][nx] = true;
+      for (int y = 1; y <= HEIGHT; y++) {
+        for (int x = 1; x <= WIDTH; x++) {
+          if (g_control[y][x] != NONE) {
+            g_remainCount--;
           }
         }
       }
@@ -141,86 +152,156 @@ class ColorCapture {
         int nx = x + DX[i];
 
         if (isWall(ny, nx)) continue;
-        if (g_board[ny][nx] == color && g_searchStamp[ny][nx] != g_stamp) {
+        if (g_searchStamp[ny][nx] == g_stamp) continue;
+        if (g_control[ny][nx] != NONE && g_control[ny][nx] != id) continue;
+
+        if (g_board[ny][nx] == color || g_control[ny][nx] == id) {
           updateControlField(ny, nx, color, id);
         }
       }
     }
 
-    void updateGetCountPixel() {
-      g_stamp++;
-      g_getCount.clear();
-
-      for (int y = 1; y <= HEIGHT; y++) {
-        for (int x = 1; x <= WIDTH; x++) {
-          if (g_canGetPixel[y][x] && g_searchStamp[y][x] != g_stamp) {
-            search(y, x);
-          }
-        }
-      }
-    }
-
-    void changeColor(char color) {
-      g_stamp++;
-
-      for (int y = 1; y <= HEIGHT; y++) {
-        for (int x = 1; x <= WIDTH; x++) {
-          if (g_canGetPixel[y][x] && g_board[y][x] == color) {
-            g_control[y][x] = MY;
-            g_myPixelList.push_back(Coord(y, x));
-          }
-        }
-      }
-    }
-
-    void search(int y, int x) {
-      char color = g_board[y][x];
-      g_getCount[color]++;
-      g_canGetPixel[y][x] = true;
-      g_searchStamp[y][x] = g_stamp;
-
-      for (int i = 0; i < 4; i++) {
-        int ny = y + DY[i];
-        int nx = x + DX[i];
-
-        if (isWall(ny, nx)) continue;
-        if (g_board[ny][nx] == color && g_searchStamp[ny][nx] != g_stamp) {
-          search(ny, nx);
-        }
-      }
-    }
-
     int makeTurn(vector<string> board, int timeLeftMs) {
+      if (timeLeftMs < 5000) {
+        g_warning = true;
+      }
       g_turn++;
-      showField();
+      //showField();
+      //fprintf(stderr,"turn %d =>\n", g_turn);
 
       if (g_turn == 1) {
         setup(board);
       }
 
       update(board);
-      int bestColor = selectBestColor();
-      changeColor(int2color(bestColor));
+
+      int bestColor = selectBeamColor();
 
       return bestColor;
     }
 
-    int selectBestColor() {
-      int maxCount = -1;
-      int bestColor = -1;
+    int selectBeamColor() {
+      queue<Node> que;
+      Node root;
+      root.board = g_board;
+      root.control = g_control;
+      que.push(root);
+      save();
 
-      for (int i = 0; i <= g_maxColor; i++) {
-        char color = int2color(i);
-        int cnt = g_getCount[color];
+      int depthLimit = (g_warning)? 1 : 4;
 
-        if (canChange(color) && maxCount < cnt) {
-          maxCount = cnt;
-          bestColor = i;
+      for (int depth = 0; depth < depthLimit; depth++) {
+        priority_queue<Node, vector<Node>, greater<Node> > pque;
+
+        while (!que.empty()) {
+          Node node = que.front(); que.pop();
+
+          for (int c = 0; c <= g_maxColor; c++) {
+            char color = int2color(c);
+            if (depth == 0 && !canChange(color)) continue;
+            if (depth > 0 && node.colors[depth-1] == color) continue;
+
+            //changeField(node.colors);
+            g_board = node.board;
+            g_control = node.control;
+
+            g_stamp++;
+            double score = erosion(1, 1, color, MY);
+            if (depth == 0) {
+              score *= 2;
+            }
+            //fprintf(stderr,"color = %c, score = %d\n", color, score);
+            Node cand;
+            cand.score = node.score + score;
+            cand.colors = node.colors;
+            cand.colors.push_back(color);
+            cand.board = g_board;
+            cand.control = g_control;
+
+            /*
+            Node ecand = cand;
+            int maxScore = 0;
+            char maxColor;
+
+            for (int ec = 0; ec <= g_maxColor; ec++) {
+              char ecolor = int2color(ec);
+              if (depth == 0 && (g_enemyColor == ecolor || g_myColor == ecolor)) continue;
+              if (depth > 0 && c == ec) continue;
+
+              g_board = cand.board;
+              g_control = cand.control;
+
+              int escore = erosion(HEIGHT, WIDTH, ecolor, ENEMY);
+
+              if (maxScore < escore) {
+                maxScore = escore;
+                maxColor = ecolor;
+              }
+            }
+
+            erosion(HEIGHT, WIDTH, maxColor, ENEMY);
+            cand.board = g_board;
+            cand.control = g_control;
+            */
+
+            pque.push(cand);
+
+            //rollback();
+          }
+        }
+
+        for (int j = 0; j < BEAM_WIDTH && !pque.empty(); j++) {
+          Node node = pque.top(); pque.pop();
+          que.push(node);
         }
       }
-      fprintf(stderr,"best color = %d, count = %d\n", bestColor, maxCount);
 
-      return bestColor;
+      Node bestNode = que.front();
+
+      rollback();
+      //fprintf(stderr,"best color = %c, count = %d\n", bestNode.colors[0], bestNode.score);
+
+      return color2int(bestNode.colors[0]);
+    }
+
+    void changeField(vector<char> &colors) {
+      int size = colors.size();
+
+      for (int i = 0; i < size; i++) {
+        char color = colors[i];
+        g_stamp++;
+        erosion(1, 1, color, MY);
+      }
+    }
+
+    void save() {
+      g_tempBoard = g_board;
+      g_tempControl = g_control;
+    }
+
+    void rollback() {
+      g_board = g_tempBoard;
+      g_control = g_tempControl;
+    }
+
+    int erosion(int y, int x, char color, int id) {
+      int cnt = (g_board[y][x] == color)? 1 : 0;
+      g_searchStamp[y][x] = g_stamp;
+      g_control[y][x] = id;
+
+      for (int i = 0; i < 4; i++) {
+        int ny = y + DY[i];
+        int nx = x + DX[i];
+        if (isWall(ny, nx)) continue;
+        if (g_searchStamp[ny][nx] == g_stamp) continue;
+        if (g_control[ny][nx] == ENEMY) continue;
+
+        if (g_control[ny][nx] == id || g_board[ny][nx] == color) {
+          cnt += erosion(ny, nx, color, id);
+        }
+      }
+
+      return cnt;
     }
 
     void showField() {
