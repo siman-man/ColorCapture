@@ -23,9 +23,16 @@ const int NONE = -1;
 const int MY = 0;
 const int ENEMY = 1;
 
-int BEAM_WIDTH = 200;
+int BEAM_WIDTH = 400;
 
 ll g_searchStamp[MAX_HEIGHT][MAX_WIDTH];
+
+unsigned long long xor128(){
+  static unsigned long long rx=123456789, ry=362436069, rz=521288629, rw=88675123;
+  unsigned long long rt = (rx ^ (rx<<11));
+  rx=ry; ry=rz; rz=rw;
+  return (rw=(rw^(rw>>19))^(rt^(rt>>8)));
+}
 
 int g_turn = 0;
 int leftTime;
@@ -40,6 +47,8 @@ vector< vector<char> > g_board;
 vector< vector<char> > g_tempBoard;
 vector< vector<int> > g_control;
 vector< vector<int> > g_tempControl;
+
+double g_rate[10] = {1.0, 0.9, 0.7, 0.5, 0.4, 0.3, 0.3, 0.3, 0.3, 0.3};
 
 const char WALL = 'W';
 
@@ -177,6 +186,9 @@ class ColorCapture {
 
       int bestColor = selectBeamColor();
 
+      //fprintf(stderr,"turn %d: my color = %c, enemy color = %c, best color = %d\n", g_turn, g_myColor, g_enemyColor, bestColor);
+      cerr.flush();
+
       return bestColor;
     }
 
@@ -188,10 +200,12 @@ class ColorCapture {
       que.push(root);
       save();
 
-      int depthLimit = (g_warning)? 1 : 4;
+      int depthLimit = (g_warning)? 1 : 3;
 
       for (int depth = 0; depth < depthLimit; depth++) {
         priority_queue<Node, vector<Node>, greater<Node> > pque;
+
+        //fprintf(stderr,"depth %d: que size = %d\n", depth, que.size());
 
         while (!que.empty()) {
           Node node = que.front(); que.pop();
@@ -207,9 +221,6 @@ class ColorCapture {
 
             g_stamp++;
             double score = erosion(1, 1, color, MY);
-            if (depth == 0) {
-              score *= 2;
-            }
             //fprintf(stderr,"color = %c, score = %d\n", color, score);
             Node cand;
             cand.score = node.score + score;
@@ -264,6 +275,28 @@ class ColorCapture {
       return color2int(bestNode.colors[0]);
     }
 
+    char enemyAction() {
+      save();
+      int maxScore = 0;
+      char bestColor = 'A';
+
+      for (int i = 0; i <= g_maxColor; i++) {
+        char color = int2color(xor128()%g_maxColor);
+        if (g_board[1][1] == color || g_board[HEIGHT][WIDTH] == color) continue;
+
+        int score = erosion(HEIGHT, WIDTH, color, ENEMY); 
+
+        if (maxScore < score) {
+          maxScore = score;
+          bestColor = color;
+        }
+
+        rollback();
+      }
+
+      return bestColor;
+    }
+
     void changeField(vector<char> &colors) {
       int size = colors.size();
 
@@ -285,16 +318,22 @@ class ColorCapture {
     }
 
     int erosion(int y, int x, char color, int id) {
-      int cnt = (g_board[y][x] == color)? 1 : 0;
+      int cnt = 0;
+
+      if (g_board[y][x] == color) {
+        cnt += min(y,x);
+      }
+
       g_searchStamp[y][x] = g_stamp;
       g_control[y][x] = id;
+      g_board[y][x] = color;
 
       for (int i = 0; i < 4; i++) {
         int ny = y + DY[i];
         int nx = x + DX[i];
         if (isWall(ny, nx)) continue;
         if (g_searchStamp[ny][nx] == g_stamp) continue;
-        if (g_control[ny][nx] == ENEMY) continue;
+        if (1 - g_control[ny][nx] == id) continue;
 
         if (g_control[ny][nx] == id || g_board[ny][nx] == color) {
           cnt += erosion(ny, nx, color, id);
