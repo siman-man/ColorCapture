@@ -19,11 +19,11 @@ const int MAX_WIDTH = 102;
 const int DY[4] = {-1, 0, 0, 1};
 const int DX[4] = { 0,-1, 1, 0};
 
-const int NONE = -1;
-const int MY = 0;
-const int ENEMY = 1;
+const char NONE = -1;
+const char MY = 0;
+const char ENEMY = 1;
 
-int BEAM_WIDTH = 400;
+int BEAM_WIDTH = 100;
 
 ll g_searchStamp[MAX_HEIGHT][MAX_WIDTH];
 
@@ -41,10 +41,10 @@ int g_stamp;
 int g_maxColor;
 bool g_warning;
 char g_enemyBestColor;
-vector< vector<char> > g_board;
-vector< vector<char> > g_tempBoard;
-vector< vector<int> > g_control;
-vector< vector<int> > g_tempControl;
+char g_board[MAX_HEIGHT][MAX_WIDTH];
+char g_tempBoard[MAX_HEIGHT][MAX_WIDTH];
+char g_control[MAX_HEIGHT][MAX_WIDTH];
+char g_tempControl[MAX_HEIGHT][MAX_WIDTH];
 
 const char WALL = '@';
 
@@ -61,8 +61,8 @@ struct Coord {
 struct Node {
   vector<char> colors;
   double score;
-  vector< vector<char> > board;
-  vector< vector<int> > control;
+  char board[MAX_HEIGHT][MAX_WIDTH];
+  char control[MAX_HEIGHT][MAX_WIDTH];
 
   Node() {
     this->score = 0.0;
@@ -89,8 +89,8 @@ class ColorCapture {
     void setup(vector<string> &board) {
       HEIGHT = board.size();
       WIDTH = board[0].size();
-      g_board = vector< vector<char> >(HEIGHT+2, vector<char>(WIDTH+2));
-      g_control = vector< vector<int> >(HEIGHT+2, vector<int>(WIDTH+2, NONE));
+      memset(g_board, 0, sizeof(g_board));
+      memset(g_control, NONE, sizeof(g_control));
       g_stamp = 0;
       g_maxColor = 0;
       g_warning = false;
@@ -149,7 +149,7 @@ class ColorCapture {
     }
 
     int makeTurn(vector<string> board, int timeLeftMs) {
-      if (timeLeftMs < 3000) {
+      if (timeLeftMs < 1500) {
         g_warning = true;
       }
       g_turn++;
@@ -171,12 +171,19 @@ class ColorCapture {
     int selectBeamColor() {
       queue<Node> que;
       Node root;
-      root.board = g_board;
-      root.control = g_control;
+      memcpy(root.board, g_board, sizeof(g_board));
+      memcpy(root.control, g_control, sizeof(g_control));
       que.push(root);
       save();
 
-      int depthLimit = (g_warning)? 1 : 2;
+      int depthLimit = (g_warning)? 1 : 3;
+
+      if (!g_warning && g_maxColor > 4) {
+        depthLimit += g_maxColor/4;
+      }
+      if (!g_warning && g_maxColor <= 4) {
+        depthLimit = 2;
+      }
 
       for (int depth = 0; depth < depthLimit; depth++) {
         priority_queue<Node, vector<Node>, greater<Node> > pque;
@@ -189,8 +196,8 @@ class ColorCapture {
             if (depth == 0 && !canChange(color)) continue;
             if (depth > 0 && node.colors[depth-1] == color) continue;
 
-            g_board = node.board;
-            g_control = node.control;
+            memcpy(g_board, node.board, sizeof(node.board));
+            memcpy(g_control, node.control, sizeof(node.control));
 
             g_stamp++;
             double score = erosion(1, 1, color, MY);
@@ -198,8 +205,8 @@ class ColorCapture {
             cand.score = node.score + score;
             cand.colors = node.colors;
             cand.colors.push_back(color);
-            cand.board = g_board;
-            cand.control = g_control;
+            memcpy(cand.board, g_board, sizeof(g_board));
+            memcpy(cand.control, g_control, sizeof(g_control));
 
             pque.push(cand);
           }
@@ -231,21 +238,21 @@ class ColorCapture {
     }
 
     void save() {
-      g_tempBoard = g_board;
-      g_tempControl = g_control;
+      memcpy(g_tempBoard, g_board, sizeof(g_board));
+      memcpy(g_tempControl, g_control, sizeof(g_control));
     }
 
     void rollback() {
-      g_board = g_tempBoard;
-      g_control = g_tempControl;
+      memcpy(g_board, g_tempBoard, sizeof(g_tempBoard));
+      memcpy(g_control, g_tempControl, sizeof(g_tempControl));
     }
 
     int erosion(int y, int x, char color, int id) {
       int cnt = 0;
 
       if (g_board[y][x] == color) {
-        if (g_turn < HEIGHT*1.2) {
-          cnt = 10 * min(y,x);
+        if (g_turn < HEIGHT*1.15) {
+          cnt = 100 * min(y,x);
         } else {
           cnt = max(y,x);
         }
@@ -263,7 +270,7 @@ class ColorCapture {
         if (g_control[ny][nx] == ENEMY) continue;
 
         if (g_control[ny][nx] == id || g_board[ny][nx] == color) {
-          if (HEIGHT < 40) {
+          if (g_maxColor <= 5) {
             cnt += erosion(ny, nx, color, id);
           } else {
             cnt = max(cnt, erosion(ny, nx, color, id));
