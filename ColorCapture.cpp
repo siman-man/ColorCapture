@@ -39,7 +39,9 @@ int HEIGHT;
 int WIDTH;
 int g_stamp;
 int g_maxColor;
+int g_remainCount;
 bool g_warning;
+bool g_stopper;
 char g_enemyBestColor;
 char g_board[MAX_HEIGHT][MAX_WIDTH];
 char g_tempBoard[MAX_HEIGHT][MAX_WIDTH];
@@ -102,6 +104,7 @@ class ColorCapture {
       g_stamp = 0;
       g_maxColor = 0;
       g_warning = false;
+      g_stopper = false;
 
       memset(g_searchStamp, -1, sizeof(g_searchStamp));
 
@@ -123,6 +126,7 @@ class ColorCapture {
     }
 
     void update(vector<string> &board) {
+      g_remainCount = HEIGHT * WIDTH;
       for (int y = 1; y <= HEIGHT; y++) {
         for (int x = 1; x <= WIDTH; x++) {
           g_board[y][x] = board[y-1][x-1];
@@ -144,11 +148,16 @@ class ColorCapture {
       updateControlField(1, 1, g_myColor, MY);
       g_stamp++;
       updateControlField(HEIGHT, WIDTH, g_enemyColor, ENEMY);
+
+      if (g_myEdgeY > g_enemyEdgeY || g_myEdgeX > g_enemyEdgeX) {
+        g_stopper = true;
+      }
     }
 
     void updateControlField(int y, int x, char color, int id) {
       g_control[y][x] = id;
       g_searchStamp[y][x] = g_stamp;
+      g_remainCount--;
 
       if (id == MY) {
         g_myEdgeY = max(g_myEdgeY, y);
@@ -215,9 +224,6 @@ class ColorCapture {
       }
       if (!g_warning && g_maxColor <= 4) {
         depthLimit = 2;
-      }
-      if (HEIGHT >= 80) {
-        BEAM_WIDTH = 20;
       }
 
       for (int depth = 0; depth < depthLimit; depth++) {
@@ -286,13 +292,14 @@ class ColorCapture {
       int cnt = 0;
 
       if (g_control[y][x] == NONE && g_board[y][x] == color) {
-        if (g_turn < HEIGHT*1.1) {
-          cnt = 100 * min(y,x);
-        } else {
-          int dA = calcDist(g_enemyEdgeA.y, g_enemyEdgeA.x, y, x);
-          int dB = calcDist(g_enemyEdgeB.y, g_enemyEdgeB.x, y, x);
+        int dA = calcDist(g_enemyEdgeA.y, g_enemyEdgeA.x, y, x);
+        int dB = calcDist(g_enemyEdgeB.y, g_enemyEdgeB.x, y, x);
 
+        if (g_stopper) {
+        //if (g_turn < HEIGHT*1.1) {
           cnt = max(y,x) + (HEIGHT-min(dA, dB));
+        } else {
+          cnt = 100 * min(y,x);
         }
       }
 
