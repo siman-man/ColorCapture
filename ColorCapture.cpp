@@ -76,6 +76,14 @@ struct Node {
 char g_myColor;
 char g_enemyColor;
 
+Coord g_enemyEdgeA;
+Coord g_enemyEdgeB;
+
+int g_myEdgeY;
+int g_myEdgeX;
+int g_enemyEdgeY;
+int g_enemyEdgeX;
+
 class ColorCapture {
   public:
     int color2int(char c) {
@@ -124,6 +132,14 @@ class ColorCapture {
       g_myColor = g_board[1][1];
       g_enemyColor = g_board[HEIGHT][WIDTH];
 
+      g_enemyEdgeA = Coord(HEIGHT, WIDTH);
+      g_enemyEdgeB = Coord(HEIGHT, WIDTH);
+
+      g_myEdgeY = 0;
+      g_myEdgeX = 0;
+      g_enemyEdgeY = HEIGHT;
+      g_enemyEdgeX = WIDTH;
+
       g_stamp++;
       updateControlField(1, 1, g_myColor, MY);
       g_stamp++;
@@ -133,6 +149,14 @@ class ColorCapture {
     void updateControlField(int y, int x, char color, int id) {
       g_control[y][x] = id;
       g_searchStamp[y][x] = g_stamp;
+
+      if (id == MY) {
+        g_myEdgeY = max(g_myEdgeY, y);
+        g_myEdgeX = max(g_myEdgeX, x);
+      } else {
+        g_enemyEdgeY = min(g_enemyEdgeY, y);
+        g_enemyEdgeX = min(g_enemyEdgeX, x);
+      }
 
       for (int i = 0; i < 4; i++) {
         int ny = y + DY[i];
@@ -144,6 +168,13 @@ class ColorCapture {
 
         if (g_board[ny][nx] == color || g_control[ny][nx] == id) {
           updateControlField(ny, nx, color, id);
+        } else if (id == ENEMY) {
+          if (g_enemyEdgeA.y > ny) {
+            g_enemyEdgeA = Coord(ny, nx);
+          }
+          if (g_enemyEdgeB.x > nx) {
+            g_enemyEdgeB = Coord(ny, nx);
+          }
         }
       }
     }
@@ -255,10 +286,13 @@ class ColorCapture {
       int cnt = 0;
 
       if (g_control[y][x] == NONE && g_board[y][x] == color) {
-        if (g_turn < HEIGHT*1.15) {
+        if (g_turn < HEIGHT*1.1) {
           cnt = 100 * min(y,x);
         } else {
-          cnt = max(y,x);
+          int dA = calcDist(g_enemyEdgeA.y, g_enemyEdgeA.x, y, x);
+          int dB = calcDist(g_enemyEdgeB.y, g_enemyEdgeB.x, y, x);
+
+          cnt = max(y,x) + (HEIGHT-min(dA, dB));
         }
       }
 
@@ -304,6 +338,10 @@ class ColorCapture {
 
     inline bool isWall(int y, int x) {
       return g_board[y][x] == WALL;
+    }
+
+    int calcDist(int y1, int x1, int y2, int x2) {
+      return abs(y1 - y2) + abs(x1 - x2);
     }
 };
 
