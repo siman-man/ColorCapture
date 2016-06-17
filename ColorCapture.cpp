@@ -23,7 +23,7 @@ const char NONE = -1;
 const char MY = 0;
 const char ENEMY = 1;
 
-int BEAM_WIDTH = 100;
+int BEAM_WIDTH = 40;
 
 ll g_searchStamp[MAX_HEIGHT][MAX_WIDTH];
 
@@ -217,10 +217,10 @@ class ColorCapture {
       que.push(root);
       save();
 
-      int depthLimit = (g_warning)? 1 : 3;
+      int depthLimit = (g_warning)? 1 : 4;
 
       if (!g_warning && g_maxColor > 4) {
-        depthLimit += g_maxColor/4;
+        depthLimit += g_maxColor/6;
       }
       if (!g_warning && g_maxColor <= 4) {
         depthLimit = 2;
