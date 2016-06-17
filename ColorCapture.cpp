@@ -46,8 +46,6 @@ vector< vector<char> > g_tempBoard;
 vector< vector<int> > g_control;
 vector< vector<int> > g_tempControl;
 
-double g_rate[10] = {1.0, 0.9, 0.7, 0.5, 0.4, 0.3, 0.3, 0.3, 0.3, 0.3};
-
 const char WALL = '@';
 
 struct Coord {
@@ -78,14 +76,8 @@ struct Node {
 char g_myColor;
 char g_enemyColor;
 
-vector<Coord> g_myPixelList;
-
 class ColorCapture {
   public:
-    ColorCapture() {
-      srand(12345);
-    }
-
     int color2int(char c) {
       return (int)(c - 'A');
     }
@@ -107,8 +99,6 @@ class ColorCapture {
 
       g_control[1][1] = MY;
       g_control[HEIGHT][WIDTH] = ENEMY;
-
-      g_myPixelList.push_back(Coord(1, 1));
 
       for (int y = 0; y <= HEIGHT+1; y++) {
         for (int x = 0; x <= WIDTH+1; x++) {
@@ -150,7 +140,7 @@ class ColorCapture {
 
         if (isWall(ny, nx)) continue;
         if (g_searchStamp[ny][nx] == g_stamp) continue;
-        if (g_control[ny][nx] != NONE && g_control[ny][nx] != id) continue;
+        if (1 - g_control[ny][nx] == id) continue;
 
         if (g_board[ny][nx] == color || g_control[ny][nx] == id) {
           updateControlField(ny, nx, color, id);
@@ -159,7 +149,7 @@ class ColorCapture {
     }
 
     int makeTurn(vector<string> board, int timeLeftMs) {
-      if (timeLeftMs < 4000) {
+      if (timeLeftMs < 3000) {
         g_warning = true;
       }
       g_turn++;
